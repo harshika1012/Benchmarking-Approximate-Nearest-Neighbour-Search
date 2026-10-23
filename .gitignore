@@ -1,0 +1,7 @@
+/run_exact.slurm
+/test_env.slurm
+__pycache__/
+slurm_outputs/
+data/
+*.hdf5
+*.index
