@@ -1,2 +1,0 @@
-dataset,index,build_time_sec,index_size_vectors,recall_at_10,n_queries,single_query_qps,batch_search_time_sec,batch_qps
-SIFT,IndexFlatL2,0.322,1000000,1.0,100,25.48,44.504,224.70

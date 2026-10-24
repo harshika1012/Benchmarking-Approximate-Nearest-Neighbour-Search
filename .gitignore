@@ -5,3 +5,5 @@ slurm_outputs/
 data/
 *.hdf5
 *.index
+/slurm_scripts/
+prev_benchmark/
