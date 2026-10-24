@@ -27,4 +27,40 @@ so the advantage of ANN over exact search grows with N.
 4. **Consequence:** the speed-up of HNSW and IVF-Flat over exact search grows with
    N; it will be smallest at 100K and largest at 1M.
 
-## Part 4
+## Part 4: Drift (synthetic data)
+
+**Question.** If an index is built on one distribution and new vectors and queries then
+arrive from a shifted one, which index degrades, how, and does rebuilding fix it?
+
+**Data.** Seeded generator (`src/drift_data.py`): 64-d mixture of 100 Gaussians
+(centres ~ N(0, 1) per dimension, within-cluster std 0.5). 200K "old" vectors; 200K
+"new" vectors and 10K queries from the same mixture translated by shift·√64 along a
+fixed random direction. Varied property: shift ∈ {0 (control), 0.5, 1, 2}. Everything
+else (seeds, sizes, index parameters, search setting) is held fixed.
+
+**Indexes.** HNSW (M=16), IVF-Flat (nlist=1024), IVF-PQ (nlist=1024, 32 bytes).
+"Stale" = built on old data, new data added afterwards. "Rebuilt" = trained and built on
+all data. The search setting is tuned once on the control and then held fixed.
+
+**Hypothesis.**
+1. **IVF-Flat (stale):** the centroids only cover the old data, so the new vectors pile
+   into the few old cells nearest to the shifted cloud. List imbalance and distance
+   computations per query rise sharply with shift, so QPS at the fixed nprobe falls
+   several-fold at shift ≥ 1. Recall stays about the same or even rises, because those
+   bloated cells contain most of each query's neighbours. The cost is in speed, not
+   accuracy.
+2. **IVF-PQ (stale):** the PQ codebooks were trained on residuals (vector minus its
+   centroid) of the old data. New vectors lie far from every centroid, so their
+   residuals are much larger than anything the codebooks saw, the quantisation error
+   grows, and recall drops sharply with shift. Speed also drops, as for IVF-Flat.
+3. **HNSW (stale):** each new vector is linked to its nearest neighbours as it is
+   inserted, so the graph adapts. Recall at the fixed efSearch stays within about 0.02
+   of the control and QPS barely changes at every shift.
+4. **Rebuilding** brings IVF-Flat's speed and IVF-PQ's recall back to control levels,
+   and makes no meaningful difference for HNSW. At shift 0, stale and rebuilt are
+   about equal for every index.
+
+**What would refute it:** stale IVF-Flat losing recall rather than speed; IVF-PQ recall
+not falling with shift; HNSW recall falling by more than 0.02; or rebuilding not
+restoring IVF.
+
