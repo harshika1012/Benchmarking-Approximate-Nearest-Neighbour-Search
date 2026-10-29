@@ -5,19 +5,15 @@ import socket
 import time
 
 import faiss
-import numpy as np
 
 from exact_baseline import (
     K, N_TUNE, QUICK_N_BASE, QUICK_N_TIMING, REPEATS, load_data,
     median_single_query_qps,
 )
-
 from recall import recall_at_k, true_distances
 
 EF_CONSTRUCTION = 200
 NBITS = 8
-QUICK_N_BASE = 100_000
-QUICK_N_TIMING = 1000
 
 # Stop a sweep once tuning recall is this high, or stops improving.
 STOP_RECALL = 0.995
@@ -26,10 +22,13 @@ MIN_GAIN = 0.001
 EF_SEARCH = [10, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536]
 NPROBE = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
 
-LABELS = {"hnsw": "HNSW", "ivfflat": "IVF-Flat", "ivfpq": "IVF-PQ"}
+LABELS = {"exact": "Exact", "hnsw": "HNSW", "ivfflat": "IVF-Flat", "ivfpq": "IVF-PQ"}
+PARAM = {"exact": "none", "hnsw": "efSearch", "ivfflat": "nprobe", "ivfpq": "nprobe"}
 
 
 def build_grid(dataset, index_name, quick):
+    if index_name == "exact":
+        return [{}]
     if index_name == "hnsw":
         ms = [8, 16, 32] if dataset == "sift" else [16, 32, 48]
         return [{"M": m} for m in (ms[:2] if quick else ms)]
@@ -42,6 +41,8 @@ def build_grid(dataset, index_name, quick):
 
 
 def build_index(index_name, d, p):
+    if index_name == "exact":
+        return faiss.IndexFlatL2(d)
     if index_name == "hnsw":
         index = faiss.IndexHNSWFlat(d, p["M"])
         index.hnsw.efConstruction = EF_CONSTRUCTION
@@ -53,6 +54,8 @@ def build_index(index_name, d, p):
 
 
 def search_values(index_name, p):
+    if index_name == "exact":
+        return [0]
     if index_name == "hnsw":
         return EF_SEARCH
     return [n for n in NPROBE if n <= p["nlist"]]
@@ -61,20 +64,8 @@ def search_values(index_name, p):
 def set_search(index, index_name, value):
     if index_name == "hnsw":
         index.hnsw.efSearch = value
-    else:
+    elif index_name != "exact":
         index.nprobe = value
-
-
-def load_data(dataset, n_base=None):
-    name, train, queries, gt_ids, gt_dist = load(dataset)
-    if n_base:
-        # Stored neighbours refer to the full base, so recompute them.
-        train = train[:n_base]
-        flat = faiss.IndexFlatL2(train.shape[1])
-        flat.add(train)
-        _, gt_ids = flat.search(queries, K)
-        gt_dist = true_distances(train, queries, gt_ids)
-    return name, train, queries, gt_ids, gt_dist
 
 
 def score(index, train, queries, gt_ids, gt_dist):
@@ -95,21 +86,23 @@ def main():
     parser.add_argument("--dataset", choices=["sift", "glove"], required=True)
     parser.add_argument("--index", choices=list(LABELS), required=True)
     parser.add_argument("--quick", action="store_true")
+    parser.add_argument("--n-base", type=int, help="use only the first N vectors")
+    parser.add_argument("--out-dir", help="default: results[_quick]/part2")
     args = parser.parse_args()
 
     faiss.omp_set_num_threads(1)
-    out_dir = "results_quick/part2" if args.quick else "results/part2"
+    n_base = args.n_base or (QUICK_N_BASE if args.quick else None)
+    out_dir = args.out_dir or ("results_quick/part2" if args.quick else "results/part2")
     os.makedirs(out_dir, exist_ok=True)
-    out_path = f"{out_dir}/{args.dataset}_{args.index}.csv"
+    suffix = f"_{args.n_base}" if args.n_base else ""
+    out_path = f"{out_dir}/{args.dataset}_{args.index}{suffix}.csv"
 
-    name, train, queries, gt_ids, gt_dist = load_data(
-        args.dataset, QUICK_N_BASE if args.quick else None
-    )
+    name, train, queries, gt_ids, gt_dist = load_data(args.dataset, n_base)
     tune_q, final_q = queries[:N_TUNE], queries[N_TUNE:]
     tune_ids, final_ids = gt_ids[:N_TUNE], gt_ids[N_TUNE:]
     tune_dist, final_dist = gt_dist[:N_TUNE], gt_dist[N_TUNE:]
     timing_q = final_q[:QUICK_N_TIMING] if args.quick else final_q
-    param = "efSearch" if args.index == "hnsw" else "nprobe"
+    param = PARAM[args.index]
 
     rows = []
     for p in build_grid(args.dataset, args.index, args.quick):
@@ -136,7 +129,7 @@ def main():
                 "dataset": name,
                 "index": LABELS[args.index],
                 "build": ",".join(f"{k}={v}" for k, v in p.items()),
-                "search": f"{param}={value}",
+                "search": f"{param}={value}" if args.index != "exact" else "-",
                 "M": p.get("M", ""),
                 "efConstruction": EF_CONSTRUCTION if args.index == "hnsw" else "",
                 "nlist": p.get("nlist", ""),
