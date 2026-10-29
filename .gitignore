@@ -7,3 +7,7 @@ data/
 *.index
 /slurm_scripts/
 prev_benchmark/
+results_quick/
+.venv/
+results/*.out
+results/*.err

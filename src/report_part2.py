@@ -131,14 +131,14 @@ def main():
     (tab_dir / "part2_qps_at_recall.md").write_text(note + "\n".join(qps_lines) + "\n")
     (tab_dir / "part2_cost_at_095.md").write_text(note + "\n".join(cost_lines) + "\n")
 
-    # One row per benchmark run behind a reported number.
-    all_rows = ([dict(part="1", **r) for r in exact_rows]
-                + [dict(part="2", **r) for r in part2_rows])
-    columns = list(dict.fromkeys(k for r in all_rows for k in r))
-    with open(root / "results.csv", "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=columns)
-        writer.writeheader()
-        writer.writerows(all_rows)
+    # # One row per benchmark run behind a reported number.
+    # all_rows = ([dict(part="1", **r) for r in exact_rows]
+    #             + [dict(part="2", **r) for r in part2_rows])
+    # columns = list(dict.fromkeys(k for r in all_rows for k in r))
+    # with open(root / "results.csv", "w", newline="") as f:
+    #     writer = csv.DictWriter(f, fieldnames=columns)
+    #     writer.writeheader()
+    #     writer.writerows(all_rows)
 
     print("\n".join(qps_lines), "\n")
     print("\n".join(cost_lines))

@@ -14,6 +14,8 @@ from recall import recall_at_k, true_distances
 K = 10
 N_TUNE = 5000
 REPEATS = 3
+QUICK_N_BASE = 100_000
+QUICK_N_TIMING = 1000
 
 DATASETS = {
     "sift": ("SIFT", "data/sift/sift-128-euclidean.hdf5"),
@@ -53,6 +55,19 @@ def load(dataset):
     return name, train, queries, gt_ids, gt_dist
 
 
+def load_data(dataset, n_base=None):
+    """Load a dataset, optionally keeping only the first n_base vectors."""
+    name, train, queries, gt_ids, gt_dist = load(dataset)
+    if n_base and n_base < len(train):
+        # Stored neighbours refer to the full base, so recompute them.
+        train = train[:n_base]
+        flat = faiss.IndexFlatL2(train.shape[1])
+        flat.add(train)
+        _, gt_ids = flat.search(queries, K)
+        gt_dist = true_distances(train, queries, gt_ids)
+    return name, train, queries, gt_ids, gt_dist
+
+
 def median_single_query_qps(index, queries, repeats=REPEATS):
     """Median QPS over repeated passes, one query per search call."""
     for q in queries[:10]:
@@ -82,13 +97,20 @@ def median_batch_time(index, queries, repeats=REPEATS):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", choices=DATASETS, required=True)
+    parser.add_argument("--quick", action="store_true",
+                        help=f"first {QUICK_N_BASE:,} vectors, "
+                             f"{QUICK_N_TIMING} timing queries")
     args = parser.parse_args()
 
-    os.makedirs("results", exist_ok=True)
+    root = "results_quick" if args.quick else "results"
+    os.makedirs(root, exist_ok=True)
     faiss.omp_set_num_threads(1)
 
-    name, train, queries, gt_ids, gt_dist = load(args.dataset)
+    name, train, queries, gt_ids, gt_dist = load_data(
+        args.dataset, QUICK_N_BASE if args.quick else None
+    )
     final_q = queries[N_TUNE:]
+    timing_q = final_q[:QUICK_N_TIMING] if args.quick else final_q
     print(f"{name}: {train.shape[0]:,} vectors, dim {train.shape[1]}", flush=True)
 
     index = faiss.IndexFlatL2(train.shape[1])
@@ -96,7 +118,8 @@ def main():
     index.add(train)
     build_time = time.perf_counter() - start
 
-    # Validate against the stored neighbours on all 10,000 queries.
+    # Validate against the stored neighbours (recomputed for --quick)
+    # on all 10,000 queries.
     _, I = index.search(queries, K)
     D = true_distances(train, queries, I)
 
@@ -112,10 +135,10 @@ def main():
     print(f"Positions with identical id: {pos_match:.4%}", flush=True)
     print(f"Max relative distance error vs file: {max_rel_err:.2e}", flush=True)
 
-    # Timing on the held-out final 5,000 queries.
-    single_qps = median_single_query_qps(index, final_q)
-    batch_time = median_batch_time(index, final_q)
-    batch_qps = len(final_q) / batch_time
+    # Timing on the held-out final queries.
+    single_qps = median_single_query_qps(index, timing_q)
+    batch_time = median_batch_time(index, timing_q)
+    batch_qps = len(timing_q) / batch_time
 
     print(f"Single-query QPS (median of {REPEATS}): {single_qps:.2f}", flush=True)
     print(f"Batch time (median of {REPEATS}): {batch_time:.3f}s "
@@ -135,7 +158,7 @@ def main():
         "topk_set_match_rate": set_match,
         "position_match_rate": pos_match,
         "max_rel_dist_error": max_rel_err,
-        "timing_queries": len(final_q),
+        "timing_queries": len(timing_q),
         "single_qps_median": single_qps,
         "batch_time_sec_median": batch_time,
         "batch_qps": batch_qps,
@@ -147,7 +170,7 @@ def main():
         "numpy_version": np.__version__,
     }
 
-    out = f"results/exact_{args.dataset}.csv"
+    out = f"{root}/exact_{args.dataset}.csv"
     with open(out, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=row.keys())
         writer.writeheader()

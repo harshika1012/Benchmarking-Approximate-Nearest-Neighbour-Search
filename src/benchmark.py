@@ -7,7 +7,11 @@ import time
 import faiss
 import numpy as np
 
-from exact_baseline import K, N_TUNE, REPEATS, load, median_single_query_qps
+from exact_baseline import (
+    K, N_TUNE, QUICK_N_BASE, QUICK_N_TIMING, REPEATS, load_data,
+    median_single_query_qps,
+)
+
 from recall import recall_at_k, true_distances
 
 EF_CONSTRUCTION = 200
