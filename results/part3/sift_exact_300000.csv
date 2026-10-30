@@ -1,2 +1,2 @@
 dataset,index,build,search,M,efConstruction,nlist,pq_m,nbits,search_param,search_value,n_base,tune_recall,final_recall,single_qps_median,timing_queries,repeats,build_time_sec,index_size_bytes,bytes_per_vector,hostname,faiss_version
-SIFT,Exact,,-,,,,,,none,0,300000,1.0,1.0,87.31641031180932,5000,3,0.0969662528950721,153600045,512.00015,gnode002,1.15.1
+SIFT,Exact,,-,,,,,,none,0,300000,1.0,1.0,85.54957196840822,5000,3,0.10184007603675127,153600045,512.00015,gnode002,1.15.1
