@@ -32,7 +32,7 @@ so the advantage of ANN over exact search grows with N.
 **Question.** If an index is built on one distribution and new vectors and queries then
 arrive from a shifted one, which index degrades, how, and does rebuilding fix it?
 
-**Data.** Seeded generator (`src/drift_data.py`): 64-d mixture of 100 Gaussians
+**Data.** Seeded generator (`code/drift_data.py`): 64-d mixture of 100 Gaussians
 (centres ~ N(0, 1) per dimension, within-cluster std 0.5). 200K "old" vectors; 200K
 "new" vectors and 10K queries from the same mixture translated by shift·√64 along a
 fixed random direction. Varied property: shift ∈ {0 (control), 0.5, 1, 2}. Everything
